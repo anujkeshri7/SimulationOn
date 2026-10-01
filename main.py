@@ -66,88 +66,6 @@ SKY_SURF    = None
 _DISK_SURFS = None
 _arc_cache  = {"pts_u": [], "land_u": None, "params": None}
 
-
-# ======== AudioSystem ========
-class AudioSystem:
-    SR = 22050
-    def __init__(self):
-        self.vol_master=0.7; self.vol_sfx=0.8; self.vol_music=0.4
-        try:
-            pygame.mixer.pre_init(self.SR, -16, 1, 512)
-            pygame.mixer.init()
-            self._ok = True
-        except Exception:
-            self._ok = False; return
-        self._cannon  = self._make_sound(self._mk_cannon())
-        self._whistle = self._make_sound(self._mk_whistle())
-        self._impact  = self._make_sound(self._mk_impact())
-        self._ambient = self._make_sound(self._mk_ambient())
-        self._amb_ch  = pygame.mixer.Channel(0)
-        self._sfx_ch  = pygame.mixer.Channel(1)
-        self._whi_ch  = pygame.mixer.Channel(2)
-        if self._ambient:
-            self._amb_ch.set_volume(self.vol_music*self.vol_master)
-            self._amb_ch.play(self._ambient, loops=-1)
-
-    def _arr(self, a):
-        a = a / max(np.max(np.abs(a)), 1e-6)
-        return (a*32767).astype(np.int16)
-
-    def _make_sound(self, a):
-        try: return pygame.sndarray.make_sound(self._arr(a))
-        except: return None
-
-    def _mk_cannon(self):
-        n=int(self.SR*0.38); t=np.linspace(0,0.38,n)
-        noise=np.random.randn(n)*0.55
-        thump=np.sin(2*np.pi*55*t)*np.exp(-t*10)
-        body =np.sin(2*np.pi*120*t)*0.3*np.exp(-t*18)
-        return ((noise+thump+body)*np.exp(-t*5)).clip(-1,1)
-
-    def _mk_whistle(self):
-        n=int(self.SR*3.0); t=np.linspace(0,3.0,n)
-        freq=900*np.exp(-t*0.7)+80
-        ph=2*np.pi*np.cumsum(freq)/self.SR
-        return (np.sin(ph)*np.exp(-t*0.35)*0.4).clip(-1,1)
-
-    def _mk_impact(self):
-        n=int(self.SR*0.7); t=np.linspace(0,0.7,n)
-        noise=np.random.randn(n)*np.exp(-t*9)
-        rumble=np.sin(2*np.pi*38*t)*np.exp(-t*3.5)
-        crack=np.sin(2*np.pi*200*t)*0.4*np.exp(-t*20)
-        return ((noise+rumble+crack)*0.8).clip(-1,1)
-
-    def _mk_ambient(self):
-        n=int(self.SR*4.0); t=np.linspace(0,4.0,n)
-        return (np.sin(2*np.pi*36*t)*0.28+np.sin(2*np.pi*50*t)*0.16+
-                np.sin(2*np.pi*74*t)*0.08+np.sin(2*np.pi*22*t)*0.12).clip(-1,1)
-
-    def play_fire(self):
-        if not self._ok: return
-        if self._cannon:
-            self._sfx_ch.set_volume(self.vol_sfx*self.vol_master)
-            self._sfx_ch.play(self._cannon)
-        if self._whistle:
-            self._whi_ch.set_volume(self.vol_sfx*self.vol_master*0.5)
-            self._whi_ch.play(self._whistle)
-
-    def play_impact(self):
-        if not self._ok: return
-        try:
-            ch=pygame.mixer.find_channel(True)
-            if ch and self._impact:
-                ch.set_volume(self.vol_sfx*self.vol_master)
-                ch.play(self._impact)
-        except: pass
-
-    def stop_whistle(self):
-        if self._ok: self._whi_ch.stop()
-
-    def set_volumes(self, master, sfx, music):
-        self.vol_master=master; self.vol_sfx=sfx; self.vol_music=music
-        if self._ok: self._amb_ch.set_volume(music*master)
-
-
 # ======== Camera ========
 class Camera:
     def __init__(self):
@@ -785,7 +703,7 @@ class App:
         self.f_xs =pygame.font.SysFont("consolas",10)
         self.f_ttl=pygame.font.SysFont("consolas",26,bold=True)
         SplashScreen(self.screen,self.clock,(self.f_ttl,self.f_lg,self.f_md,self.f_xs)).run()
-        self.audio=AudioSystem()
+        # Removed audio system for cloud compatibility
         self.cam=Camera(); self.shells=[]; self.impacts=[]
         self.stats={"fired":0,"hits":0,"near":0}
         self.auto=False; self.auto_t=0.0; self.guid_on=True
@@ -832,7 +750,7 @@ class App:
         bl=55.0
         spawn=[math.sin(az)*math.cos(rad)*bl,8+math.sin(rad)*bl,math.cos(az)*math.cos(rad)*bl]
         sh=Shell(spawn,[vx,vy,vz],self.wind(),self.v("drag"),self.guid_on)
-        self.shells.append(sh); self.stats["fired"]+=1; self.audio.play_fire()
+        self.shells.append(sh); self.stats["fired"]+=1
 
     def check_land(self):
         tx,_,tz=self.target(); R=self.v("R"); r=self.v("r")
@@ -843,7 +761,6 @@ class App:
                 elif d<=R: sh.result="NEAR"; self.stats["near"]+=1
                 else: sh.result="MISS"
                 self.impacts.append(ImpactEffect(sh.land[0],sh.land[2],sh.result))
-                self.audio.play_impact(); self.audio.stop_whistle()
 
     def handle_rdrag(self,ev):
         in_v=lambda p: PANEL_W<p[0]<PANEL_W+VIEW_W
@@ -1018,7 +935,6 @@ class App:
                 if self.auto_t>=1.8: self.auto_t=0; self.fire()
             self.cam.update()
             for sl in self.sl.values(): sl.update(dt)
-            self.audio.set_volumes(self.v("vol"),0.85,0.4)
             for sh in self.shells: sh.step(dt,tgt)
             self.check_land()
             for eff in self.impacts: eff.update(dt)
