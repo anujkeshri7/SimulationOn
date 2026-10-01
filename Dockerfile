@@ -1,33 +1,45 @@
-﻿FROM python:3.11-slim
+FROM python:3.11-slim
 
+# Install system dependencies
 RUN apt-get update && apt-get install -y \
     xvfb \
     x11vnc \
     fluxbox \
     novnc \
     websockify \
-    net-tools \
+    netcat-openbsd \
+    x11-utils \
+    libgl1-mesa-glx \
+    libglib2.0-0 \
+    libsm6 \
+    libxext6 \
+    libxrender1 \
+    libfontconfig1 \
+    libice6 \
+    libasound2 \
+    libpulse0 \
+    procps \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
+
+# Install Python dependencies
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Copy app code
 COPY . .
 
-RUN echo '#!/bin/bash\n\
-Xvfb :99 -screen 0 1366x768x24 &\n\
-export DISPLAY=:99\n\
-sleep 2\n\
-fluxbox &\n\
-x11vnc -display :99 -forever -shared -nopw -quiet -listen 127.0.0.1 &\n\
-sleep 2\n\
-python main.py &\n\
-PORT=${PORT:-10000}\n\
-echo "Starting websockify on port $PORT..."\n\
-websockify --web=/usr/share/novnc/ $PORT 127.0.0.1:5900\n\
-' > /app/start.sh
+# Copy and fix startup script (ensure Unix line endings)
+COPY start.sh /app/start.sh
+RUN sed -i 's/\r$//' /app/start.sh && chmod +x /app/start.sh
 
-RUN chmod +x /app/start.sh
+# Pygame needs SDL to not try to open a real display
+ENV SDL_VIDEODRIVER=x11
+ENV SDL_AUDIODRIVER=dummy
+ENV DISPLAY=:99
+
+# Expose websockify port (Render will map $PORT)
+EXPOSE 10000
 
 CMD ["/app/start.sh"]
