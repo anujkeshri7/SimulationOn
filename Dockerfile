@@ -19,8 +19,12 @@ COPY . .
 RUN echo '#!/bin/bash\n\
 Xvfb :99 -screen 0 1366x768x24 &\n\
 export DISPLAY=:99\n\
+sleep 2\n\
 fluxbox &\n\
 x11vnc -display :99 -forever -nopw -quiet -listen localhost -xkb &\n\
+sleep 2\n\
+# Fallback audio driver so pygame doesnt crash\n\
+export SDL_AUDIODRIVER=dummy\n\
 python main.py &\n\
 PORT=${PORT:-10000}\n\
 websockify --web=/usr/share/novnc/ $PORT localhost:5900\n\
